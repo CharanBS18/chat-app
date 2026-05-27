@@ -13,6 +13,7 @@ export default function Chat() {
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [peopleError, setPeopleError] = useState("");
   const [conversationMeta, setConversationMeta] = useState({});
 
   const currentUserId = getEntityId(user);
@@ -21,9 +22,14 @@ export default function Chat() {
   const fetchUsers = useCallback(async () => {
     try {
       const { data } = await userAPI.getUsers();
+      if (!Array.isArray(data)) {
+        throw new Error("The backend did not return a valid people list.");
+      }
       setUsers(data.filter((u) => getEntityId(u) !== currentUserId));
+      setPeopleError("");
     } catch (err) {
       console.error("Failed to fetch users:", err.message);
+      setPeopleError("Could not load people. Your backend API is not serving the chat routes yet.");
     } finally {
       setLoadingUsers(false);
     }
@@ -99,6 +105,7 @@ export default function Chat() {
         onSelectUser={handleSelectUser}
         currentUser={user}
         conversationMeta={conversationMeta}
+        error={peopleError}
       />
       <ChatWindow
         selectedUser={selectedUser}

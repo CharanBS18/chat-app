@@ -16,12 +16,15 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       const { data } = await authAPI.login({ email, password });
+      if (!data?.token || !data?._id) {
+        throw new Error("The backend did not return a valid user session.");
+      }
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
       setUser(data);
       return { success: true };
     } catch (err) {
-      const msg = err.response?.data?.message || "Login failed";
+      const msg = err.response?.data?.message || err.message || "Login failed";
       setError(msg);
       return { success: false, message: msg };
     } finally {
@@ -38,12 +41,15 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
       });
+      if (!data?.token || !data?._id) {
+        throw new Error("The backend did not return a valid user session.");
+      }
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
       setUser(data);
       return { success: true };
     } catch (err) {
-      const msg = err.response?.data?.message || "Registration failed";
+      const msg = err.response?.data?.message || err.message || "Registration failed";
       setError(msg);
       return { success: false, message: msg };
     } finally {

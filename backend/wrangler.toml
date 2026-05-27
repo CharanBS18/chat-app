@@ -1,4 +1,4 @@
-name = "chat-app-api"
+name = "red-butterfly-813e"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 compatibility_flags = ["nodejs_compat"]

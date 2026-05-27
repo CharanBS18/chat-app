@@ -12,6 +12,7 @@ export default function Sidebar({
   onSelectUser,
   currentUser,
   conversationMeta = {},
+  error = "",
 }) {
   const { logout } = useAuth();
   const { connected } = useSocket();
@@ -134,7 +135,19 @@ export default function Sidebar({
 
       {/* User list */}
       <div className="sidebar-users">
-        {loading ? (
+        {error ? (
+          <div className="sidebar-empty error">
+            <div className="sidebar-empty-icon">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M12 7v6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <circle cx="12" cy="17" r="1" fill="currentColor"/>
+              </svg>
+            </div>
+            <strong>People could not load</strong>
+            <span>{error}</span>
+          </div>
+        ) : loading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="user-skeleton">
               <div className="skeleton-avatar" />

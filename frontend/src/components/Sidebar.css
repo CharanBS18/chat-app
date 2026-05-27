@@ -328,6 +328,15 @@
   width: 50px;
 }
 
+.sidebar-empty.error {
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.sidebar-empty.error .sidebar-empty-icon {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--red);
+}
+
 .sidebar-empty strong {
   color: var(--text-primary);
   font-size: 14px;
