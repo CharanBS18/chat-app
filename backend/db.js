@@ -33,11 +33,21 @@ const db = {
     findByEmail: (email) =>
       read().users.find((u) => u.email === email.toLowerCase()) || null,
 
+    findByName: (name) => {
+      const normalized = name.trim().replace(/\s+/g, " ").toLowerCase();
+      return (
+        read().users.find(
+          (u) => u.name.trim().replace(/\s+/g, " ").toLowerCase() === normalized
+        ) || null
+      );
+    },
+
     create: (userData) => {
       const data = read();
       const user = {
         _id: require("uuid").v4(),
         ...userData,
+        name: userData.name.trim().replace(/\s+/g, " "),
         email: userData.email.toLowerCase(),
         isOnline: false,
         lastSeen: new Date().toISOString(),

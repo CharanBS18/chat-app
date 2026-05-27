@@ -33,7 +33,11 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await authAPI.register({ name, email, password });
+      const { data } = await authAPI.register({
+        name: name.trim().replace(/\s+/g, " "),
+        email,
+        password,
+      });
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data));
       setUser(data);

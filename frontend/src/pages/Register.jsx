@@ -15,10 +15,15 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const cleanName = form.name.trim().replace(/\s+/g, " ");
+    if (cleanName.length < 2) {
+      setError("Name must be at least 2 characters");
+      return;
+    }
     if (form.password.length < 6) {
       return;
     }
-    const result = await register(form.name, form.email, form.password);
+    const result = await register(cleanName, form.email, form.password);
     if (result.success) navigate("/chat");
   };
 
@@ -41,7 +46,7 @@ export default function Register() {
         </div>
 
         <h1 className="auth-title">Create account</h1>
-        <p className="auth-subtitle">Start chatting with people in real time</p>
+        <p className="auth-subtitle">Choose a unique name friends can search</p>
 
         {error && (
           <div className="auth-error">
@@ -56,13 +61,13 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="auth-field">
-            <label>Full Name</label>
+            <label>Search Name</label>
             <input
               type="text"
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="John Doe"
+              placeholder="Use a unique name"
               required
               minLength={2}
               autoFocus

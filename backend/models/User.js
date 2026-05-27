@@ -12,6 +12,7 @@ const User = {
 
   findById: (id) => db.users.findById(id),
   findByEmail: (email) => db.users.findByEmail(email),
+  findByName: (name) => db.users.findByName(name),
   findAll: () => db.users.findAll(),
   update: (id, updates) => db.users.update(id, updates),
 

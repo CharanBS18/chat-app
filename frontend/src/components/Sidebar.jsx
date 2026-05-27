@@ -18,8 +18,7 @@ export default function Sidebar({
   const [search, setSearch] = useState("");
 
   const filtered = users.filter((u) =>
-    u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
+    u.name.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const onlineCount = users.filter((u) => u.isOnline).length;
@@ -69,7 +68,7 @@ export default function Sidebar({
         </svg>
         <input
           type="text"
-          placeholder="Search users..."
+          placeholder="Search by registered name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

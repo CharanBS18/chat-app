@@ -7,15 +7,22 @@ const generateToken = (id) =>
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    if (!name || !email || !password)
+    const cleanName = name?.trim().replace(/\s+/g, " ");
+
+    if (!cleanName || !email || !password)
       return res.status(400).json({ message: "All fields are required" });
+    if (cleanName.length < 2)
+      return res.status(400).json({ message: "Name must be at least 2 characters" });
     if (password.length < 6)
       return res.status(400).json({ message: "Password must be at least 6 characters" });
 
     if (User.findByEmail(email))
       return res.status(400).json({ message: "Email already registered" });
 
-    const user = await User.create({ name, email, password });
+    if (User.findByName(cleanName))
+      return res.status(400).json({ message: "Name already in use. Please use another name." });
+
+    const user = await User.create({ name: cleanName, email, password });
     res.status(201).json({ ...User.safe(user), token: generateToken(user._id) });
   } catch (err) {
     res.status(500).json({ message: err.message });

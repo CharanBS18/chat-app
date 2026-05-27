@@ -58,19 +58,27 @@ async function comparePassword(password, hash) {
   return newHash === hash;
 }
 
+function normalizeName(name = '') {
+  return name.trim().replace(/\s+/g, ' ');
+}
+
 // ============================================
 // User Operations
 // ============================================
 const UserOps = {
   findById: (id) => STORAGE.users.find(u => u._id === id) || null,
   findByEmail: (email) => STORAGE.users.find(u => u.email === email.toLowerCase()) || null,
+  findByName: (name) => {
+    const normalized = normalizeName(name).toLowerCase();
+    return STORAGE.users.find(u => normalizeName(u.name).toLowerCase() === normalized) || null;
+  },
   findAll: () => STORAGE.users,
   
   async create(userData) {
     const hashedPassword = await hashPassword(userData.password);
     const user = {
       _id: generateUUID(),
-      name: userData.name,
+      name: normalizeName(userData.name),
       email: userData.email.toLowerCase(),
       password: hashedPassword,
       avatar: userData.avatar || '',
@@ -177,9 +185,17 @@ router.post('/api/auth/register', async (request, env) => {
   try {
     const body = await request.json();
     const { name, email, password } = body;
+    const cleanName = normalizeName(name);
 
-    if (!name || !email || !password) {
+    if (!cleanName || !email || !password) {
       return new Response(JSON.stringify({ message: 'All fields are required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (cleanName.length < 2) {
+      return new Response(JSON.stringify({ message: 'Name must be at least 2 characters' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -199,7 +215,14 @@ router.post('/api/auth/register', async (request, env) => {
       });
     }
 
-    const user = await UserOps.create({ name, email, password, avatar: '' });
+    if (UserOps.findByName(cleanName)) {
+      return new Response(JSON.stringify({ message: 'Name already in use. Please use another name.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const user = await UserOps.create({ name: cleanName, email, password, avatar: '' });
     const token = await generateToken(user._id, env.JWT_SECRET || 'your-secret-key');
 
     return new Response(JSON.stringify({ ...UserOps.safe(user), token }), {
