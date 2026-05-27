@@ -1,0 +1,27 @@
+name = "chat-app-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "chat-app-api-prod"
+routes = [
+  { pattern = "api.chatflow.dev/api/*", zone_name = "chatflow.dev" }
+]
+
+[env.development]
+name = "chat-app-api-dev"
+
+# Environment variables
+[env.production.vars]
+JWT_SECRET = "your-production-secret-key-change-this"
+ENVIRONMENT = "production"
+
+[env.development.vars]
+JWT_SECRET = "dev-secret-key"
+ENVIRONMENT = "development"
+
+# Build configuration
+[build]
+command = "npm install"
+cwd = "./"

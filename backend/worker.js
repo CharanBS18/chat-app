@@ -1,0 +1,417 @@
+import { Router } from 'itty-router';
+import { json, text } from 'itty-router';
+
+// ============================================
+// In-Memory Storage (for demo/development)
+// ============================================
+let STORAGE = {
+  users: [],
+  messages: [],
+};
+
+// ============================================
+// Utility: UUID Generation
+// ============================================
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// ============================================
+// Utility: JWT Token Operations
+// ============================================
+async function generateToken(id, secret) {
+  const header = btoa(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = btoa(JSON.stringify({ id, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 604800 }));
+  const signature = btoa(`${header}.${payload}.${secret}`);
+  return `${header}.${payload}.${signature}`;
+}
+
+async function verifyToken(token, secret) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================
+// Utility: Password Hashing (Simple mock)
+// ============================================
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function comparePassword(password, hash) {
+  const newHash = await hashPassword(password);
+  return newHash === hash;
+}
+
+// ============================================
+// User Operations
+// ============================================
+const UserOps = {
+  findById: (id) => STORAGE.users.find(u => u._id === id) || null,
+  findByEmail: (email) => STORAGE.users.find(u => u.email === email.toLowerCase()) || null,
+  findAll: () => STORAGE.users,
+  
+  async create(userData) {
+    const hashedPassword = await hashPassword(userData.password);
+    const user = {
+      _id: generateUUID(),
+      name: userData.name,
+      email: userData.email.toLowerCase(),
+      password: hashedPassword,
+      avatar: userData.avatar || '',
+      isOnline: false,
+      lastSeen: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    };
+    STORAGE.users.push(user);
+    return user;
+  },
+
+  update: (id, updates) => {
+    const user = STORAGE.users.find(u => u._id === id);
+    if (user) {
+      Object.assign(user, updates);
+    }
+    return user;
+  },
+
+  safe: (user) => {
+    if (!user) return null;
+    const { password, ...safe } = user;
+    return safe;
+  },
+};
+
+// ============================================
+// Message Operations
+// ============================================
+const MessageOps = {
+  findBetween: (userA, userB) => {
+    return STORAGE.messages.filter(
+      m => (m.sender === userA && m.receiver === userB) || (m.sender === userB && m.receiver === userA)
+    );
+  },
+
+  create: (data) => {
+    const message = {
+      _id: generateUUID(),
+      sender: data.sender,
+      receiver: data.receiver,
+      content: data.content,
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    STORAGE.messages.push(message);
+    return message;
+  },
+
+  markRead: (senderId, receiverId) => {
+    STORAGE.messages.forEach(m => {
+      if (m.sender === senderId && m.receiver === receiverId && !m.read) {
+        m.read = true;
+      }
+    });
+  },
+};
+
+// ============================================
+// Router Setup
+// ============================================
+const router = Router();
+
+// CORS Headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+// Handle OPTIONS requests
+router.options('*', () => new Response(null, { headers: corsHeaders }));
+
+// ============================================
+// Middleware: Token Verification
+// ============================================
+async function verifyAuth(request, env) {
+  const auth = request.headers.get('authorization');
+  if (!auth?.startsWith('Bearer ')) {
+    return { error: 'Not authorized, no token', user: null };
+  }
+
+  const token = auth.split(' ')[1];
+  const decoded = await verifyToken(token, env.JWT_SECRET || 'your-secret-key');
+  
+  if (!decoded) {
+    return { error: 'Not authorized, token failed', user: null };
+  }
+
+  const user = UserOps.findById(decoded.id);
+  if (!user) {
+    return { error: 'User not found', user: null };
+  }
+
+  return { error: null, user };
+}
+
+// ============================================
+// Routes: Auth
+// ============================================
+
+// POST /api/auth/register
+router.post('/api/auth/register', async (request, env) => {
+  try {
+    const body = await request.json();
+    const { name, email, password } = body;
+
+    if (!name || !email || !password) {
+      return new Response(JSON.stringify({ message: 'All fields are required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (password.length < 6) {
+      return new Response(JSON.stringify({ message: 'Password must be at least 6 characters' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (UserOps.findByEmail(email)) {
+      return new Response(JSON.stringify({ message: 'Email already registered' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const user = await UserOps.create({ name, email, password, avatar: '' });
+    const token = await generateToken(user._id, env.JWT_SECRET || 'your-secret-key');
+
+    return new Response(JSON.stringify({ ...UserOps.safe(user), token }), {
+      status: 201,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// POST /api/auth/login
+router.post('/api/auth/login', async (request, env) => {
+  try {
+    const body = await request.json();
+    const { email, password } = body;
+
+    if (!email || !password) {
+      return new Response(JSON.stringify({ message: 'Email and password are required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const user = UserOps.findByEmail(email);
+    if (!user || !(await comparePassword(password, user.password))) {
+      return new Response(JSON.stringify({ message: 'Invalid email or password' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const token = await generateToken(user._id, env.JWT_SECRET || 'your-secret-key');
+
+    return new Response(JSON.stringify({ ...UserOps.safe(user), token }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// ============================================
+// Routes: Users
+// ============================================
+
+// GET /api/users
+router.get('/api/users', async (request, env) => {
+  try {
+    const auth = await verifyAuth(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ message: auth.error }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const users = UserOps.findAll().map(u => UserOps.safe(u));
+    return new Response(JSON.stringify(users), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// GET /api/users/me
+router.get('/api/users/me', async (request, env) => {
+  try {
+    const auth = await verifyAuth(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ message: auth.error }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify(UserOps.safe(auth.user)), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// ============================================
+// Routes: Messages
+// ============================================
+
+// GET /api/messages/:userId
+router.get('/api/messages/:userId', async (request, env) => {
+  try {
+    const auth = await verifyAuth(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ message: auth.error }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { userId } = request.params;
+    const myId = auth.user._id;
+
+    if (!UserOps.findById(userId)) {
+      return new Response(JSON.stringify({ message: 'User not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const messages = MessageOps.findBetween(myId, userId);
+    MessageOps.markRead(userId, myId);
+
+    const populated = messages.map(m => ({
+      ...m,
+      sender: UserOps.safe(UserOps.findById(m.sender)),
+      receiver: UserOps.safe(UserOps.findById(m.receiver)),
+    }));
+
+    return new Response(JSON.stringify(populated), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// POST /api/messages/:userId
+router.post('/api/messages/:userId', async (request, env) => {
+  try {
+    const auth = await verifyAuth(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ message: auth.error }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { userId } = request.params;
+    const body = await request.json();
+    const { content } = body;
+    const myId = auth.user._id;
+
+    if (!content?.trim()) {
+      return new Response(JSON.stringify({ message: 'Message content is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const message = MessageOps.create({ sender: myId, receiver: userId, content: content.trim() });
+
+    return new Response(JSON.stringify({
+      ...message,
+      sender: UserOps.safe(UserOps.findById(myId)),
+      receiver: UserOps.safe(UserOps.findById(userId)),
+    }), {
+      status: 201,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// ============================================
+// Health Check
+// ============================================
+
+router.get('/api/health', () => {
+  return new Response(JSON.stringify({ status: 'ok' }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+});
+
+// ============================================
+// 404 Handler
+// ============================================
+
+router.all('*', () => {
+  return new Response(JSON.stringify({ message: 'Not found' }), {
+    status: 404,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+});
+
+// ============================================
+// Export Handler
+// ============================================
+
+export default {
+  fetch: router.handle,
+};
