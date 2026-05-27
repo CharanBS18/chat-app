@@ -1,6 +1,3 @@
-import { Router } from 'itty-router';
-import { json, text } from 'itty-router';
-
 // ============================================
 // In-Memory Storage (for demo/development)
 // ============================================
@@ -8,6 +5,23 @@ let STORAGE = {
   users: [],
   messages: [],
 };
+
+const STORAGE_KEY = 'chatapp:data';
+
+async function loadStorage(env) {
+  if (!env?.CHAT_STORE) return;
+
+  const stored = await env.CHAT_STORE.get(STORAGE_KEY, 'json');
+  if (stored && Array.isArray(stored.users) && Array.isArray(stored.messages)) {
+    STORAGE = stored;
+  }
+}
+
+async function saveStorage(env) {
+  if (!env?.CHAT_STORE) return;
+
+  await env.CHAT_STORE.put(STORAGE_KEY, JSON.stringify(STORAGE));
+}
 
 // ============================================
 // Utility: UUID Generation
@@ -140,7 +154,62 @@ const MessageOps = {
 // ============================================
 // Router Setup
 // ============================================
-const router = Router();
+function createRouter() {
+  const routes = [];
+
+  function add(method, pattern, handler) {
+    routes.push({ method, pattern, handler });
+  }
+
+  function matchPath(pattern, pathname) {
+    if (pattern === '*') return {};
+
+    const patternParts = pattern.split('/').filter(Boolean);
+    const pathParts = pathname.split('/').filter(Boolean);
+
+    if (patternParts.length !== pathParts.length) return null;
+
+    const params = {};
+    for (let i = 0; i < patternParts.length; i += 1) {
+      const patternPart = patternParts[i];
+      const pathPart = pathParts[i];
+
+      if (patternPart.startsWith(':')) {
+        params[patternPart.slice(1)] = decodeURIComponent(pathPart);
+      } else if (patternPart !== pathPart) {
+        return null;
+      }
+    }
+
+    return params;
+  }
+
+  async function handle(request, env, ctx) {
+    const url = new URL(request.url);
+
+    for (const route of routes) {
+      if (route.method !== request.method && route.method !== 'ALL') continue;
+
+      const params = matchPath(route.pattern, url.pathname);
+      if (!params) continue;
+
+      request.params = params;
+      return route.handler(request, env, ctx);
+    }
+
+    return new Response('Not found', { status: 404 });
+  }
+
+  return {
+    get: (pattern, handler) => add('GET', pattern, handler),
+    post: (pattern, handler) => add('POST', pattern, handler),
+    options: (pattern, handler) => add('OPTIONS', pattern, handler),
+    all: (pattern, handler) => add('ALL', pattern, handler),
+    handle,
+  };
+}
+
+const router = createRouter();
 
 // CORS Headers
 const corsHeaders = {
@@ -180,8 +249,7 @@ async function verifyAuth(request, env) {
 // Routes: Auth
 // ============================================
 
-// POST /api/auth/register
-router.post('/api/auth/register', async (request, env) => {
+async function handleRegister(request, env) {
   try {
     const body = await request.json();
     const { name, email, password } = body;
@@ -235,10 +303,9 @@ router.post('/api/auth/register', async (request, env) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
 
-// POST /api/auth/login
-router.post('/api/auth/login', async (request, env) => {
+async function handleLogin(request, env) {
   try {
     const body = await request.json();
     const { email, password } = body;
@@ -270,14 +337,17 @@ router.post('/api/auth/login', async (request, env) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
 
-// ============================================
-// Routes: Users
-// ============================================
+// POST /api/auth/register
+router.post('/api/auth/register', handleRegister);
+router.post('/auth/register', handleRegister);
 
-// GET /api/users
-router.get('/api/users', async (request, env) => {
+// POST /api/auth/login
+router.post('/api/auth/login', handleLogin);
+router.post('/auth/login', handleLogin);
+
+async function handleUsers(request, env) {
   try {
     const auth = await verifyAuth(request, env);
     if (auth.error) {
@@ -298,10 +368,13 @@ router.get('/api/users', async (request, env) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
 
-// GET /api/users/me
-router.get('/api/users/me', async (request, env) => {
+// GET /api/users
+router.get('/api/users', handleUsers);
+router.get('/users', handleUsers);
+
+async function handleMe(request, env) {
   try {
     const auth = await verifyAuth(request, env);
     if (auth.error) {
@@ -321,7 +394,11 @@ router.get('/api/users/me', async (request, env) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
-});
+}
+
+// GET /api/users/me
+router.get('/api/users/me', handleMe);
+router.get('/users/me', handleMe);
 
 // ============================================
 // Routes: Messages
@@ -519,10 +596,22 @@ router.post('/send', async (request, env) => {
 // Health Check
 // ============================================
 
-router.get('/api/health', () => {
-  return new Response(JSON.stringify({ status: 'ok' }), {
+function healthResponse(env) {
+  return new Response(JSON.stringify({
+    status: 'ok',
+    service: 'chat-api',
+    storage: env?.CHAT_STORE ? 'kv' : 'memory',
+  }), {
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+router.get('/api/health', (request, env) => {
+  return healthResponse(env);
+});
+
+router.get('/health', (request, env) => {
+  return healthResponse(env);
 });
 
 // ============================================
@@ -541,5 +630,10 @@ router.all('*', () => {
 // ============================================
 
 export default {
-  fetch: router.handle,
+  async fetch(request, env, ctx) {
+    await loadStorage(env);
+    const response = await router.handle(request, env, ctx);
+    await saveStorage(env);
+    return response;
+  },
 };

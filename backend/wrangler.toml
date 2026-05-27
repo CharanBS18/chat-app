@@ -12,7 +12,6 @@ routes = [
 [env.development]
 name = "chat-app-api-dev"
 
-# Environment variables
 [env.production.vars]
 JWT_SECRET = "your-production-secret-key-change-this"
 ENVIRONMENT = "production"
@@ -21,7 +20,10 @@ ENVIRONMENT = "production"
 JWT_SECRET = "dev-secret-key"
 ENVIRONMENT = "development"
 
-# Build configuration
 [build]
 command = "npm install"
 cwd = "./"
+
+[[kv_namespaces]]
+binding = "CHAT_STORE"
+id = "d0d61250aa1e48cb81297af554350e4b"
