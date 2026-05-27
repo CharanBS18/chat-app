@@ -18,6 +18,8 @@ function formatDate(dateStr) {
 }
 
 export default function Message({ message, isMine, showAvatar, showDate }) {
+  const senderName = message.sender?.name || "User";
+
   return (
     <>
       {showDate && (
@@ -28,14 +30,18 @@ export default function Message({ message, isMine, showAvatar, showDate }) {
       <div className={`message-row ${isMine ? "mine" : "theirs"}`}>
         {!isMine && (
           <div className="message-avatar-slot">
-            {showAvatar ? <Avatar name={message.sender?.name} size={28} /> : null}
+            {showAvatar ? <Avatar name={senderName} size={28} /> : null}
           </div>
         )}
         <div className="message-content">
           <div className={`message-bubble ${isMine ? "bubble-mine" : "bubble-theirs"}`}>
             <p className="message-text">{message.content}</p>
+            {message.status === "failed" && <span className="message-status failed">Not sent</span>}
           </div>
-          <span className="message-time">{formatTime(message.createdAt)}</span>
+          <span className="message-time">
+            {formatTime(message.createdAt)}
+            {isMine && message.status === "sending" ? " · sending" : ""}
+          </span>
         </div>
       </div>
     </>

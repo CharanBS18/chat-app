@@ -387,6 +387,111 @@ router.post('/api/messages/:userId', async (request, env) => {
   }
 });
 
+// GET /messages?userId=:userId
+router.get('/messages', async (request, env) => {
+  try {
+    const auth = await verifyAuth(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ message: auth.error }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const url = new URL(request.url);
+    const userId = url.searchParams.get('userId') || url.searchParams.get('receiverId');
+    const myId = auth.user._id;
+
+    if (!userId) {
+      return new Response(JSON.stringify({ message: 'User ID is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!UserOps.findById(userId)) {
+      return new Response(JSON.stringify({ message: 'User not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const messages = MessageOps.findBetween(myId, userId);
+    MessageOps.markRead(userId, myId);
+
+    const populated = messages.map(m => ({
+      ...m,
+      sender: UserOps.safe(UserOps.findById(m.sender)),
+      receiver: UserOps.safe(UserOps.findById(m.receiver)),
+    }));
+
+    return new Response(JSON.stringify(populated), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
+// POST /send
+router.post('/send', async (request, env) => {
+  try {
+    const auth = await verifyAuth(request, env);
+    if (auth.error) {
+      return new Response(JSON.stringify({ message: auth.error }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const body = await request.json();
+    const userId = body.userId || body.receiverId;
+    const content = body.content;
+    const myId = auth.user._id;
+
+    if (!userId) {
+      return new Response(JSON.stringify({ message: 'Receiver ID is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!UserOps.findById(userId)) {
+      return new Response(JSON.stringify({ message: 'User not found' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (!content?.trim()) {
+      return new Response(JSON.stringify({ message: 'Message content is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const message = MessageOps.create({ sender: myId, receiver: userId, content: content.trim() });
+
+    return new Response(JSON.stringify({
+      ...message,
+      sender: UserOps.safe(UserOps.findById(myId)),
+      receiver: UserOps.safe(UserOps.findById(userId)),
+    }), {
+      status: 201,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ message: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});
+
 // ============================================
 // Health Check
 // ============================================

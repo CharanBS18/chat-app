@@ -10,6 +10,18 @@ const api = axios.create({
   withCredentials: false,
 });
 
+async function withApiFallback(primaryRequest, fallbackRequest) {
+  try {
+    return await primaryRequest();
+  } catch (err) {
+    if (err.response?.status === 404 && fallbackRequest) {
+      return fallbackRequest();
+    }
+
+    throw err;
+  }
+}
+
 // Attach JWT token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
@@ -31,13 +43,29 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  register: (data) => api.post("/auth/register", data),
-  login: (data) => api.post("/auth/login", data),
+  register: (data) =>
+    withApiFallback(
+      () => api.post("/auth/register", data),
+      () => api.post("/api/auth/register", data)
+    ),
+  login: (data) =>
+    withApiFallback(
+      () => api.post("/auth/login", data),
+      () => api.post("/api/auth/login", data)
+    ),
 };
 
 export const userAPI = {
-  getUsers: () => api.get("/users"),
-  getMe: () => api.get("/users/me"),
+  getUsers: () =>
+    withApiFallback(
+      () => api.get("/users"),
+      () => api.get("/api/users")
+    ),
+  getMe: () =>
+    withApiFallback(
+      () => api.get("/users/me"),
+      () => api.get("/api/users/me")
+    ),
 };
 
 export const messageAPI = {

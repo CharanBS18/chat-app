@@ -60,11 +60,40 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+.chat-back-btn,
+.chat-refresh-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: var(--transition);
+}
+
+.chat-refresh-btn {
+  display: flex;
+}
+
+.chat-back-btn:hover,
+.chat-refresh-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .chat-header-avatar {
   position: relative;
   flex-shrink: 0;
+}
+
+.chat-header-info {
+  min-width: 0;
 }
 
 .chat-header-status {
@@ -84,6 +113,9 @@
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat-header-presence {
@@ -116,6 +148,20 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.chat-error-banner {
+  align-self: center;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.22);
+  border-radius: var(--radius-md);
+  color: #fecaca;
+  font-size: 13px;
+  margin: 0 0 12px;
+  max-width: 520px;
+  padding: 9px 12px;
+  text-align: center;
+  width: fit-content;
 }
 
 .chat-loading {
@@ -228,8 +274,10 @@
   font-size: 15px;
   resize: none;
   max-height: 120px;
+  min-height: 24px;
   line-height: 1.5;
   padding: 0;
+  overflow-y: auto;
 }
 
 .chat-input::placeholder {
@@ -269,4 +317,40 @@
   color: var(--text-muted);
   margin-top: 6px;
   padding: 0 4px;
+}
+
+@media (max-width: 760px) {
+  .chat-window {
+    display: none;
+    width: 100vw;
+    min-width: 100vw;
+  }
+
+  .chat-layout.has-selected-chat .chat-window {
+    display: flex;
+  }
+
+  .chat-back-btn {
+    display: flex;
+  }
+
+  .chat-header {
+    padding: 10px 12px;
+  }
+
+  .chat-header-avatar {
+    display: none;
+  }
+
+  .chat-messages {
+    padding: 14px 12px 8px;
+  }
+
+  .chat-input-area {
+    padding: 10px 10px 12px;
+  }
+
+  .chat-input-hint {
+    display: none;
+  }
 }

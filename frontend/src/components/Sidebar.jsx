@@ -1,10 +1,18 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useSocket } from "../context/SocketContext";
+import { formatConversationTime, getEntityId } from "../utils/chat";
 import Avatar from "./Avatar";
 import "./Sidebar.css";
 
-export default function Sidebar({ users, loading, selectedUser, onSelectUser, currentUser }) {
+export default function Sidebar({
+  users,
+  loading,
+  selectedUser,
+  onSelectUser,
+  currentUser,
+  conversationMeta = {},
+}) {
   const { logout } = useAuth();
   const { connected } = useSocket();
   const [search, setSearch] = useState("");
@@ -31,7 +39,7 @@ export default function Sidebar({ users, loading, selectedUser, onSelectUser, cu
         </div>
         <div className={`sidebar-conn ${connected ? "connected" : "disconnected"}`}>
           <span className="sidebar-conn-dot" />
-          {connected ? "Live" : "Offline"}
+          {connected ? "Live" : "Sync"}
         </div>
       </div>
 
@@ -74,7 +82,7 @@ export default function Sidebar({ users, loading, selectedUser, onSelectUser, cu
 
       {/* Online count */}
       <div className="sidebar-section-label">
-        <span>Users</span>
+        <span>Chats</span>
         {onlineCount > 0 && (
           <span className="sidebar-online-badge">{onlineCount} online</span>
         )}
@@ -94,31 +102,41 @@ export default function Sidebar({ users, loading, selectedUser, onSelectUser, cu
           ))
         ) : filtered.length === 0 ? (
           <div className="sidebar-empty">
-            {search ? "No users found" : "No other users yet"}
+            {search ? "No chats found" : "No people to chat with yet"}
           </div>
         ) : (
-          filtered.map((u) => (
-            <button
-              key={u._id}
-              className={`user-item ${selectedUser?._id === u._id ? "active" : ""}`}
-              onClick={() => onSelectUser(u)}
-            >
-              <div className="user-item-avatar">
-                <Avatar name={u.name} size={40} />
-                <span className={`user-item-status-dot ${u.isOnline ? "online" : "offline"}`} />
-              </div>
-              <div className="user-item-info">
-                <span className="user-item-name">{u.name}</span>
-                <span className="user-item-sub">
-                  {u.isOnline ? (
-                    <><span className="online-label">● Online</span></>
-                  ) : (
-                    "Offline"
-                  )}
-                </span>
-              </div>
-            </button>
-          ))
+          filtered.map((u) => {
+            const userId = getEntityId(u);
+            const meta = conversationMeta[userId] || {};
+            const isActive = getEntityId(selectedUser) === userId;
+
+            return (
+              <button
+                key={userId}
+                className={`user-item ${isActive ? "active" : ""}`}
+                onClick={() => onSelectUser(u)}
+              >
+                <div className="user-item-avatar">
+                  <Avatar name={u.name} size={44} />
+                  <span className={`user-item-status-dot ${u.isOnline ? "online" : "offline"}`} />
+                </div>
+                <div className="user-item-info">
+                  <div className="user-item-main">
+                    <span className="user-item-name">{u.name}</span>
+                    <span className="user-item-time">
+                      {formatConversationTime(meta.lastMessage?.createdAt)}
+                    </span>
+                  </div>
+                  <div className="user-item-meta">
+                    <span className="user-item-sub">
+                      {meta.preview || (u.isOnline ? "Online" : "Tap to start chatting")}
+                    </span>
+                    {meta.unread > 0 && <span className="user-item-unread">{meta.unread}</span>}
+                  </div>
+                </div>
+              </button>
+            );
+          })
         )}
       </div>
     </aside>

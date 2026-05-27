@@ -39,6 +39,7 @@
   word-wrap: break-word;
   word-break: break-word;
   line-height: 1.5;
+  min-width: 48px;
 }
 
 .bubble-mine {
@@ -66,6 +67,17 @@
   padding: 0 4px;
 }
 
+.message-status {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  margin-top: 4px;
+}
+
+.message-status.failed {
+  color: #fecaca;
+}
+
 /* Date divider */
 .message-date-divider {
   display: flex;
@@ -87,4 +99,14 @@
   padding: 0 12px;
   white-space: nowrap;
   font-family: var(--font-mono);
+}
+
+@media (max-width: 760px) {
+  .message-content {
+    max-width: 82%;
+  }
+
+  .message-bubble {
+    padding: 9px 12px;
+  }
 }

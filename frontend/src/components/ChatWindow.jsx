@@ -1,17 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { messageAPI } from "../services/api";
+import { getEntityId, isSameDay, normalizeMessages } from "../utils/chat";
 import Avatar from "./Avatar";
 import Message from "./Message";
 import "./ChatWindow.css";
 
-export default function ChatWindow({ selectedUser, currentUser, socket }) {
+export default function ChatWindow({
+  selectedUser,
+  currentUser,
+  socket,
+  onConversationUpdate,
+  onClose,
+}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [typing, setTyping] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const selectedUserId = getEntityId(selectedUser);
+  const currentUserId = getEntityId(currentUser);
 
   // Scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -30,10 +41,16 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
     const fetchHistory = async ({ showLoading = false } = {}) => {
       if (showLoading) setLoading(true);
       try {
-        const { data } = await messageAPI.getMessages(selectedUser._id);
-        if (isMounted) setMessages(data);
+        const { data } = await messageAPI.getMessages(selectedUserId);
+        const nextMessages = normalizeMessages(data);
+        if (isMounted) {
+          setMessages(nextMessages);
+          setError("");
+          onConversationUpdate?.(selectedUserId, nextMessages);
+        }
       } catch (err) {
         console.error("Failed to fetch messages:", err.message);
+        if (isMounted) setError("Could not load this conversation.");
       } finally {
         if (isMounted && showLoading) setLoading(false);
       }
@@ -46,7 +63,14 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
       isMounted = false;
       clearInterval(pollId);
     };
-  }, [selectedUser?._id]);
+  }, [selectedUserId, onConversationUpdate]);
+
+  useEffect(() => {
+    if (!inputRef.current) return;
+
+    inputRef.current.style.height = "auto";
+    inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 128)}px`;
+  }, [input]);
 
   // Scroll when messages change
   useEffect(() => {
@@ -60,26 +84,28 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
 
     const handleReceive = (message) => {
       const isRelevant =
-        (message.sender._id === selectedUser?._id &&
-          message.receiver._id === currentUser._id) ||
-        (message.sender._id === currentUser._id &&
-          message.receiver._id === selectedUser?._id);
+        (getEntityId(message.sender) === selectedUserId &&
+          getEntityId(message.receiver) === currentUserId) ||
+        (getEntityId(message.sender) === currentUserId &&
+          getEntityId(message.receiver) === selectedUserId);
 
       if (isRelevant) {
         setMessages((prev) => {
           // Avoid duplicates (sender gets echo back)
           const exists = prev.some((m) => m._id === message._id);
-          return exists ? prev : [...prev, message];
+          const nextMessages = exists ? prev : normalizeMessages([...prev, message]);
+          onConversationUpdate?.(selectedUserId, nextMessages);
+          return nextMessages;
         });
       }
     };
 
     const handleTyping = ({ userId }) => {
-      if (userId === selectedUser?._id) setTyping(true);
+      if (userId === selectedUserId) setTyping(true);
     };
 
     const handleStopTyping = ({ userId }) => {
-      if (userId === selectedUser?._id) setTyping(false);
+      if (userId === selectedUserId) setTyping(false);
     };
 
     socket.on("receive_message", handleReceive);
@@ -91,7 +117,7 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
       socket.off("user_typing", handleTyping);
       socket.off("user_stop_typing", handleStopTyping);
     };
-  }, [socket, selectedUser?._id, currentUser._id]);
+  }, [socket, selectedUserId, currentUserId, onConversationUpdate]);
 
   const handleInputChange = (e) => {
     setInput(e.target.value);
@@ -99,14 +125,14 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
     if (!socket || !selectedUser) return;
 
     // Emit typing
-    socket.emit("typing", { receiverId: selectedUser._id });
+    socket.emit("typing", { receiverId: selectedUserId });
 
     // Clear existing timeout
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     // Stop typing after 1.5s of inactivity
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit("stop_typing", { receiverId: selectedUser._id });
+      socket.emit("stop_typing", { receiverId: selectedUserId });
     }, 1500);
   };
 
@@ -115,18 +141,46 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
     const trimmed = input.trim();
     if (!trimmed || !selectedUser || isSending) return;
 
+    const tempMessage = {
+      _id: `temp-${Date.now()}`,
+      content: trimmed,
+      sender: currentUser,
+      receiver: selectedUser,
+      createdAt: new Date().toISOString(),
+      status: "sending",
+    };
+
     setIsSending(true);
+    setInput("");
+    setMessages((prev) => {
+      const nextMessages = [...prev, tempMessage];
+      onConversationUpdate?.(selectedUserId, nextMessages);
+      return nextMessages;
+    });
+
     try {
-      const { data } = await messageAPI.sendMessage(selectedUser._id, trimmed);
-      setMessages((prev) => [...prev, data]);
-      setInput("");
+      const { data } = await messageAPI.sendMessage(selectedUserId, trimmed);
+      setMessages((prev) => {
+        const nextMessages = normalizeMessages(
+          prev.map((message) => (message._id === tempMessage._id ? data : message))
+        );
+        onConversationUpdate?.(selectedUserId, nextMessages);
+        return nextMessages;
+      });
+      setError("");
 
       if (socket) {
-        socket.emit("stop_typing", { receiverId: selectedUser._id });
+        socket.emit("stop_typing", { receiverId: selectedUserId });
       }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     } catch (err) {
       console.error("Failed to send message:", err.message);
+      setError("Message was not sent. Check your connection and try again.");
+      setMessages((prev) =>
+        prev.map((message) =>
+          message._id === tempMessage._id ? { ...message, status: "failed" } : message
+        )
+      );
     } finally {
       setIsSending(false);
     }
@@ -151,7 +205,7 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
             </svg>
           </div>
           <h2>Select a conversation</h2>
-          <p>Choose a user from the sidebar to start chatting</p>
+          <p>Choose someone from the chat list to start messaging</p>
         </div>
       </div>
     );
@@ -162,6 +216,11 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
       {/* Chat header */}
       <div className="chat-header">
         <div className="chat-header-user">
+          <button className="chat-back-btn" onClick={onClose} title="Back to chats">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
           <div className="chat-header-avatar">
             <Avatar name={selectedUser.name} size={42} />
             <span className={`chat-header-status ${selectedUser.isOnline ? "online" : "offline"}`} />
@@ -184,10 +243,36 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
             </span>
           </div>
         </div>
+        <button
+          className="chat-refresh-btn"
+          onClick={() => {
+            setLoading(true);
+            messageAPI
+              .getMessages(selectedUserId)
+              .then(({ data }) => {
+                const nextMessages = normalizeMessages(data);
+                setMessages(nextMessages);
+                onConversationUpdate?.(selectedUserId, nextMessages);
+                setError("");
+              })
+              .catch((err) => {
+                console.error("Failed to refresh messages:", err.message);
+                setError("Could not refresh this conversation.");
+              })
+              .finally(() => setLoading(false));
+          }}
+          title="Refresh messages"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M21 12a9 9 0 0 1-15.5 6.2M3 12A9 9 0 0 1 18.5 5.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M18.5 2.5v3.3h-3.3M5.5 21.5v-3.3h3.3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
 
       {/* Messages */}
       <div className="chat-messages">
+        {error && <div className="chat-error-banner">{error}</div>}
         {loading ? (
           <div className="chat-loading">
             <div className="chat-loading-spinner" />
@@ -207,16 +292,19 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
           <>
             {messages.map((msg, idx) => {
               const prevMsg = messages[idx - 1];
-              const isMine = msg.sender._id === currentUser._id;
+              const isMine = getEntityId(msg.sender) === currentUserId;
               const showAvatar =
                 !isMine &&
-                (idx === 0 || prevMsg?.sender._id !== msg.sender._id);
+                (idx === 0 || getEntityId(prevMsg?.sender) !== getEntityId(msg.sender));
+              const showDate = idx === 0 || !isSameDay(prevMsg?.createdAt, msg.createdAt);
+
               return (
                 <Message
                   key={msg._id}
                   message={msg}
                   isMine={isMine}
                   showAvatar={showAvatar}
+                  showDate={showDate}
                 />
               );
             })}
@@ -239,6 +327,7 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
       <form className="chat-input-area" onSubmit={handleSend}>
         <div className="chat-input-wrapper">
           <textarea
+            ref={inputRef}
             className="chat-input"
             value={input}
             onChange={handleInputChange}
