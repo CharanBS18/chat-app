@@ -25,19 +25,27 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
       return;
     }
 
-    const fetchHistory = async () => {
-      setLoading(true);
+    let isMounted = true;
+
+    const fetchHistory = async ({ showLoading = false } = {}) => {
+      if (showLoading) setLoading(true);
       try {
         const { data } = await messageAPI.getMessages(selectedUser._id);
-        setMessages(data);
+        if (isMounted) setMessages(data);
       } catch (err) {
         console.error("Failed to fetch messages:", err.message);
       } finally {
-        setLoading(false);
+        if (isMounted && showLoading) setLoading(false);
       }
     };
 
-    fetchHistory();
+    fetchHistory({ showLoading: true });
+    const pollId = setInterval(fetchHistory, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(pollId);
+    };
   }, [selectedUser?._id]);
 
   // Scroll when messages change
@@ -45,7 +53,8 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Socket events
+  // Optional socket events. The deployed Cloudflare Worker uses REST, so this
+  // only runs if a compatible socket implementation is supplied later.
   useEffect(() => {
     if (!socket) return;
 
@@ -101,23 +110,26 @@ export default function ChatWindow({ selectedUser, currentUser, socket }) {
     }, 1500);
   };
 
-  const handleSend = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || !selectedUser || !socket || isSending) return;
+    if (!trimmed || !selectedUser || isSending) return;
 
     setIsSending(true);
-    socket.emit("send_message", {
-      receiverId: selectedUser._id,
-      content: trimmed,
-    });
+    try {
+      const { data } = await messageAPI.sendMessage(selectedUser._id, trimmed);
+      setMessages((prev) => [...prev, data]);
+      setInput("");
 
-    // Stop typing
-    socket.emit("stop_typing", { receiverId: selectedUser._id });
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
-    setInput("");
-    setTimeout(() => setIsSending(false), 300);
+      if (socket) {
+        socket.emit("stop_typing", { receiverId: selectedUser._id });
+      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    } catch (err) {
+      console.error("Failed to send message:", err.message);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleKeyDown = (e) => {
