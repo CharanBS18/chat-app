@@ -16,12 +16,15 @@ export default function Sidebar({
   const { logout } = useAuth();
   const { connected } = useSocket();
   const [search, setSearch] = useState("");
+  const [showProfile, setShowProfile] = useState(false);
+  const hasSearch = search.trim().length > 0;
 
   const filtered = users.filter((u) =>
     u.name.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const onlineCount = users.filter((u) => u.isOnline).length;
+  const startedChats = Object.values(conversationMeta).filter((meta) => meta.lastMessage).length;
 
   return (
     <aside className="sidebar">
@@ -42,49 +45,91 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Current user */}
-      <div className="sidebar-me">
-        <Avatar name={currentUser?.name} size={36} />
-        <div className="sidebar-me-info">
-          <span className="sidebar-me-name">{currentUser?.name}</span>
-          <span className="sidebar-me-status">
-            <span className="online-dot" /> Online
+      {/* Current user profile */}
+      <div className="sidebar-profile">
+        <button
+          className="profile-summary"
+          onClick={() => setShowProfile((value) => !value)}
+          aria-expanded={showProfile}
+        >
+          <Avatar name={currentUser?.name} size={48} />
+          <div className="profile-summary-info">
+            <span className="profile-label">Your profile</span>
+            <span className="profile-name">{currentUser?.name}</span>
+            <span className="profile-email">{currentUser?.email}</span>
+          </div>
+          <span className={`profile-chevron ${showProfile ? "open" : ""}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </span>
-        </div>
-        <button className="sidebar-logout" onClick={logout} title="Sign out">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            <polyline points="16 17 21 12 16 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
         </button>
+
+        {showProfile && (
+          <div className="profile-panel">
+            <div className="profile-stat-grid">
+              <div className="profile-stat">
+                <span>{users.length}</span>
+                <small>People</small>
+              </div>
+              <div className="profile-stat">
+                <span>{startedChats}</span>
+                <small>Chats</small>
+              </div>
+              <div className="profile-stat">
+                <span>{onlineCount}</span>
+                <small>Online</small>
+              </div>
+            </div>
+            <div className="profile-name-card">
+              <span>Friends can find you as</span>
+              <strong>{currentUser?.name}</strong>
+            </div>
+            <button className="profile-logout" onClick={logout}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <polyline points="16 17 21 12 16 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Search */}
-      <div className="sidebar-search">
-        <svg className="sidebar-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none">
-          <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.5"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-        </svg>
-        <input
-          type="text"
-          placeholder="Search by registered name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button className="sidebar-search-clear" onClick={() => setSearch("")}>
-            ×
-          </button>
-        )}
+      <div className="people-search-block">
+        <div className="people-search-copy">
+          <span>Find friends</span>
+          <p>Search the exact name they used when registering.</p>
+        </div>
+        <div className="sidebar-search">
+          <svg className="sidebar-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="1.7"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Type a friend's name"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="sidebar-search-clear" onClick={() => setSearch("")} title="Clear search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Online count */}
       <div className="sidebar-section-label">
-        <span>Chats</span>
-        {onlineCount > 0 && (
-          <span className="sidebar-online-badge">{onlineCount} online</span>
-        )}
+        <span>{hasSearch ? "People" : "Recent chats"}</span>
+        <span className="sidebar-online-badge">
+          {hasSearch ? `${filtered.length} found` : `${onlineCount} online`}
+        </span>
       </div>
 
       {/* User list */}
@@ -101,7 +146,18 @@ export default function Sidebar({
           ))
         ) : filtered.length === 0 ? (
           <div className="sidebar-empty">
-            {search ? "No chats found" : "No people to chat with yet"}
+            <div className="sidebar-empty-icon">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M20 20l-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <strong>{search ? "No person found" : "No people yet"}</strong>
+            <span>
+              {search
+                ? "Check the registered name and try again."
+                : "When people create accounts, they will appear here."}
+            </span>
           </div>
         ) : (
           filtered.map((u) => {
