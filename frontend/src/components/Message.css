@@ -1,0 +1,90 @@
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 2px;
+  animation: fadeIn 0.18s ease forwards;
+}
+
+.message-row.mine {
+  flex-direction: row-reverse;
+}
+
+.message-avatar-slot {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+}
+
+.message-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 65%;
+  gap: 3px;
+}
+
+.message-row.mine .message-content {
+  align-items: flex-end;
+}
+
+.message-row.theirs .message-content {
+  align-items: flex-start;
+}
+
+.message-bubble {
+  padding: 10px 14px;
+  border-radius: 18px;
+  word-wrap: break-word;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.bubble-mine {
+  background: var(--accent);
+  color: white;
+  border-radius: 18px 18px 4px 18px;
+}
+
+.bubble-theirs {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 18px 18px 18px 4px;
+}
+
+.message-text {
+  font-size: 14.5px;
+  white-space: pre-wrap;
+}
+
+.message-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  padding: 0 4px;
+}
+
+/* Date divider */
+.message-date-divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0 12px;
+}
+
+.message-date-divider::before,
+.message-date-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.message-date-divider span {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 0 12px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
